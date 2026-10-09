@@ -32,8 +32,9 @@ dependencies:
     sdk: flutter
   wajiha_game_core:
     path: packages/wajiha_game_core
-  audioplayers: ^6.1.0
-  shared_preferences: ^2.3.2
+  audioplayers: ^6.8.1
+  shared_preferences: ^2.5.6
+  in_app_purchase: ^3.2.0
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -62,17 +63,11 @@ flutter:
   uses-material-design: true
 
   # To add assets to your application, add an assets section, like this:
+  # All audio is synthesized in code (lib/services/tavern_audio.dart);
+  # no audio asset files needed.
   assets:
-    - assets/audio/click.wav
-    - assets/audio/move.wav
-    - assets/audio/capture.wav
-    - assets/audio/crown.wav
-    - assets/audio/start.wav
-    - assets/audio/win.wav
-    - assets/audio/lose.wav
-    - assets/audio/invalid.wav
-    - assets/audio/music_menu.wav
-    - assets/audio/music_game.wav
+    - assets/checkers_logo.webp
+    - assets/wajiha_logo.png
 
   fonts:
     - family: EBGaramond
