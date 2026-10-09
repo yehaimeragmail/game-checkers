@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../checkers_theme.dart';
 import '../engine/checkers_engine.dart';
+import '../services/iap_service.dart';
 import '../services/tavern_audio.dart';
 import '../services/tavern_settings.dart';
 import '../theme/tavern_themes.dart';
@@ -18,12 +19,14 @@ class CheckersGameScreen extends StatefulWidget {
   final CheckersController controller;
   final TavernAudio audio;
   final TavernSettings settings;
+  final CheckersStore store;
 
   const CheckersGameScreen({
     super.key,
     required this.controller,
     required this.audio,
     required this.settings,
+    required this.store,
   });
 
   @override
@@ -272,6 +275,7 @@ class _CheckersGameScreenState extends State<CheckersGameScreen>
                   builder: (_) => SettingsScreen(
                     audio: widget.audio,
                     settings: widget.settings,
+                    store: widget.store,
                   ),
                 ));
                 widget.audio.configure(

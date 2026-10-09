@@ -2,26 +2,48 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 
-/// Tip-jar IAP for Checkers: "buy me a coffee" / "buy me a chocolate".
+/// Real Play Billing store for Checkers: Pro unlock + tip jar.
 ///
-/// The products must be created by Wajiha in Play Console; until then (or on
-/// any store error) the service degrades gracefully — the UI shows the
-/// products as unavailable instead of crashing or hanging.
-class TipJar {
-  static const coffeeId = 'buy_me_a_coffee';
-  static const chocolateId = 'buy_me_a_chocolate';
-  static const productIds = {coffeeId, chocolateId};
+/// Product IDs (Wajiha creates these in Play Console — game name in the ID,
+/// no dots, no underscores):
+/// - `checkerspro` — one-time NON-CONSUMABLE: unlocks Pro forever.
+/// - `checkerscoffee` — CONSUMABLE tip.
+/// - `checkerschocolate` — CONSUMABLE tip.
+///
+/// Until the products exist in Play Console (or on any store error) the
+/// service exposes [storeReady] = false and the UI shows an honest
+/// "available after store setup" state — never a fake buy button.
+class CheckersStore {
+  static const proId = 'checkerspro';
+  static const coffeeId = 'checkerscoffee';
+  static const chocolateId = 'checkerschocolate';
+  static const productIds = {proId, coffeeId, chocolateId};
 
   final InAppPurchase _iap = InAppPurchase.instance;
 
   bool available = false;
+  bool storeReady = false; // true once real products are queryable
   List<ProductDetails> products = [];
   String? error;
   bool _initialized = false;
   StreamSubscription<List<PurchaseDetails>>? _sub;
 
-  /// Last completed tip, for a thank-you toast. Reset by the UI after showing.
+  /// Callbacks the UI wires up.
   final ValueNotifier<String?> lastThanks = ValueNotifier(null);
+  final ValueNotifier<bool> proPurchased = ValueNotifier(false);
+  final ValueNotifier<bool> purchaseInProgress = ValueNotifier(false);
+  final ValueNotifier<String?> purchaseError = ValueNotifier(null);
+
+  ProductDetails? get proProduct => _byId(proId);
+  ProductDetails? get coffeeProduct => _byId(coffeeId);
+  ProductDetails? get chocolateProduct => _byId(chocolateId);
+
+  ProductDetails? _byId(String id) {
+    for (final p in products) {
+      if (p.id == id) return p;
+    }
+    return null;
+  }
 
   Future<void> init() async {
     if (_initialized) return;
@@ -29,7 +51,7 @@ class TipJar {
     try {
       available = await _iap.isAvailable();
       if (!available) {
-        error = 'Store unavailable';
+        error = 'Store unavailable on this device';
         return;
       }
       _sub = _iap.purchaseStream.listen(
@@ -39,14 +61,17 @@ class TipJar {
       );
       final resp = await _iap.queryProductDetails(productIds);
       if (resp.error != null) {
-        error = 'Could not load products';
+        error = 'Could not reach the store';
         return;
       }
       products = resp.productDetails;
       if (resp.notFoundIDs.isNotEmpty) {
-        // Products not created in Play Console yet — normal during dev.
-        error = 'Products not configured yet';
+        // Products not created in Play Console yet — normal before launch.
+        error = 'Available after store setup';
+        return;
       }
+      storeReady = products.isNotEmpty;
+      if (!storeReady) error = 'Available after store setup';
     } catch (_) {
       available = false;
       error = 'Store error';
@@ -57,9 +82,24 @@ class TipJar {
     for (final p in list) {
       if (p.status == PurchaseStatus.purchased ||
           p.status == PurchaseStatus.restored) {
-        lastThanks.value = p.productID == chocolateId
-            ? 'Thank you for the chocolate!'
-            : 'Thank you for the coffee!';
+        if (p.productID == proId) {
+          proPurchased.value = true;
+          lastThanks.value = 'Welcome to Checkers PRO!';
+        } else if (p.productID == chocolateId) {
+          lastThanks.value = 'Thank you for the chocolate!';
+        } else if (p.productID == coffeeId) {
+          lastThanks.value = 'Thank you for the coffee!';
+        }
+      } else if (p.status == PurchaseStatus.error) {
+        purchaseError.value = 'Purchase failed — please try again.';
+      } else if (p.status == PurchaseStatus.canceled) {
+        purchaseError.value = null;
+      }
+      if (p.status == PurchaseStatus.purchased ||
+          p.status == PurchaseStatus.restored ||
+          p.status == PurchaseStatus.canceled ||
+          p.status == PurchaseStatus.error) {
+        purchaseInProgress.value = false;
       }
       if (p.pendingCompletePurchase) {
         _iap.completePurchase(p).catchError((_) {});
@@ -67,18 +107,49 @@ class TipJar {
     }
   }
 
-  Future<bool> buy(ProductDetails product) async {
+  Future<void> buyPro() async {
+    final p = proProduct;
+    if (p == null) return;
+    purchaseError.value = null;
+    purchaseInProgress.value = true;
     try {
-      return await _iap.buyConsumable(
+      await _iap.buyNonConsumable(
+          purchaseParam: PurchaseParam(productDetails: p));
+    } catch (_) {
+      purchaseInProgress.value = false;
+      purchaseError.value = 'Purchase failed — please try again.';
+    }
+  }
+
+  Future<void> buyTip(ProductDetails product) async {
+    purchaseError.value = null;
+    purchaseInProgress.value = true;
+    try {
+      await _iap.buyConsumable(
         purchaseParam: PurchaseParam(productDetails: product),
       );
     } catch (_) {
-      return false;
+      purchaseInProgress.value = false;
+      purchaseError.value = 'Purchase failed — please try again.';
+    }
+  }
+
+  /// Restore Pro on a new device. The purchase stream delivers restored
+  /// purchases, which flip [proPurchased].
+  Future<void> restore() async {
+    purchaseError.value = null;
+    try {
+      await _iap.restorePurchases();
+    } catch (_) {
+      purchaseError.value = 'Restore failed — please try again.';
     }
   }
 
   Future<void> dispose() async {
     await _sub?.cancel();
     lastThanks.dispose();
+    proPurchased.dispose();
+    purchaseInProgress.dispose();
+    purchaseError.dispose();
   }
 }

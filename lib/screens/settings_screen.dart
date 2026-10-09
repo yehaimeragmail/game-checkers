@@ -4,34 +4,30 @@ import '../services/iap_service.dart';
 import '../services/tavern_audio.dart';
 import '../services/tavern_settings.dart';
 import '../theme/tavern_themes.dart';
+import 'pro_screen.dart';
 
 /// Settings — parlor drawer metaphor, theme-aware.
 class SettingsScreen extends StatefulWidget {
   final TavernAudio audio;
   final TavernSettings settings;
+  final CheckersStore store;
   const SettingsScreen(
-      {super.key, required this.audio, required this.settings});
+      {super.key,
+      required this.audio,
+      required this.settings,
+      required this.store});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final TipJar _tipJar = TipJar();
+  CheckersStore get _store => widget.store;
 
   TavernThemeDef get _t => TavernThemes.byId(widget.settings.themeId);
 
-  @override
-  void initState() {
-    super.initState();
-    _tipJar.init().then((_) {
-      if (mounted) setState(() {});
-    });
-    _tipJar.lastThanks.addListener(_onThanks);
-  }
-
   void _onThanks() {
-    final msg = _tipJar.lastThanks.value;
+    final msg = _store.lastThanks.value;
     if (msg == null || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -40,13 +36,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
         behavior: SnackBarBehavior.floating,
       ),
     );
-    _tipJar.lastThanks.value = null;
+    _store.lastThanks.value = null;
+  }
+
+  void _openPro() {
+    widget.audio.click();
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => ProScreen(
+        audio: widget.audio,
+        settings: widget.settings,
+        store: _store,
+      ),
+    ));
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // init() is idempotent; this just refreshes this screen once the
+    // store finishes loading (the menu already kicked it off).
+    _store.init().then((_) {
+      if (mounted) setState(() {});
+    });
+    _store.lastThanks.addListener(_onThanks);
   }
 
   @override
   void dispose() {
-    _tipJar.lastThanks.removeListener(_onThanks);
-    _tipJar.dispose();
+    _store.lastThanks.removeListener(_onThanks);
     super.dispose();
   }
 
@@ -80,6 +97,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                _SectionTitle('Checkers PRO', t),
+                GestureDetector(
+                  onTap: _openPro,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 14),
+                    decoration: Tavern.plaqueDeco(t),
+                    child: Row(
+                      children: [
+                        Icon(Icons.workspace_premium,
+                            color: t.accentLight, size: 26),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                s.isPro
+                                    ? 'PRO active — everything unlocked'
+                                    : 'Unlock PRO',
+                                style: Tavern.body(16, theme: t).copyWith(
+                                    fontWeight: FontWeight.w600),
+                              ),
+                              Text(
+                                s.isPro
+                                    ? 'All 9 themes, 5 disc styles, Hard bot.'
+                                    : 'Free-vs-Pro comparison, one-time purchase.',
+                                style: Tavern.body(13,
+                                    theme: t,
+                                    color: t.ivory.withValues(alpha: 0.65)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.chevron_right, color: t.accentLight),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
                 _SectionTitle('Sound', t),
                 _SettingRow(
                   theme: t,
@@ -150,43 +208,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       GestureDetector(
                         onTap: () async {
                           audio.click();
+                          if (!s.isPro &&
+                              TavernThemes.isProTheme(th.id)) {
+                            _openPro();
+                            return;
+                          }
                           await s.setTheme(th.id);
                         },
-                        child: Container(
-                          width: 64,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                            gradient: LinearGradient(colors: [
-                              th.sqLight,
-                              th.sqDark,
-                            ]),
-                            border: Border.all(
-                              color: s.themeId == th.id
-                                  ? th.accentLight
-                                  : th.accent.withValues(alpha: 0.3),
-                              width: s.themeId == th.id ? 3 : 1.5,
-                            ),
-                          ),
-                          alignment: Alignment.center,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              for (int i = 0; i < 2; i++)
-                                Container(
-                                  width: 10,
-                                  height: 10,
-                                  margin: const EdgeInsets.symmetric(
-                                      horizontal: 1.5),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: i == 0
-                                        ? th.redDisc
-                                        : th.blackDisc,
-                                  ),
+                        child: Stack(
+                          children: [
+                            Container(
+                              width: 64,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                gradient: LinearGradient(colors: [
+                                  th.sqLight,
+                                  th.sqDark,
+                                ]),
+                                border: Border.all(
+                                  color: s.themeId == th.id
+                                      ? th.accentLight
+                                      : th.accent.withValues(alpha: 0.3),
+                                  width: s.themeId == th.id ? 3 : 1.5,
                                 ),
-                            ],
-                          ),
+                              ),
+                              alignment: Alignment.center,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  for (int i = 0; i < 2; i++)
+                                    Container(
+                                      width: 10,
+                                      height: 10,
+                                      margin: const EdgeInsets.symmetric(
+                                          horizontal: 1.5),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: i == 0
+                                            ? th.redDisc
+                                            : th.blackDisc,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            if (!s.isPro &&
+                                TavernThemes.isProTheme(th.id))
+                              Positioned(
+                                top: 2,
+                                right: 3,
+                                child: Icon(Icons.lock,
+                                    size: 12,
+                                    color: th.accentLight.withValues(
+                                        alpha: 0.9)),
+                              ),
+                          ],
                         ),
                       ),
                   ],
@@ -202,10 +279,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         i++)
                       TavernChip(
                         theme: t,
-                        label: PieceStyles.names[i],
+                        label: (!s.isPro && PieceStyles.isProStyle(i))
+                            ? '🔒 ${PieceStyles.names[i]}'
+                            : PieceStyles.names[i],
                         selected: s.pieceStyle == i,
                         onTap: () async {
                           audio.click();
+                          if (!s.isPro && PieceStyles.isProStyle(i)) {
+                            _openPro();
+                            return;
+                          }
                           await s.setPieceStyle(i);
                         },
                       ),
@@ -230,9 +313,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 10),
-                      if (_tipJar.products.isEmpty)
+                      if (!_store.storeReady)
                         Text(
-                          _tipJar.error ?? 'Loading…',
+                          _store.error ?? 'Available after store setup.',
                           style: Tavern.body(13,
                               theme: t,
                               color:
@@ -243,18 +326,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           spacing: 10,
                           alignment: WrapAlignment.center,
                           children: [
-                            for (final p in _tipJar.products)
-                              TavernChip(
-                                theme: t,
-                                label: p.id == TipJar.chocolateId
-                                    ? '🍫 ${p.price}'
-                                    : '☕ ${p.price}',
-                                selected: false,
-                                onTap: () {
-                                  audio.click();
-                                  _tipJar.buy(p);
-                                },
-                              ),
+                            for (final p in _store.products)
+                              if (p.id != CheckersStore.proId)
+                                TavernChip(
+                                  theme: t,
+                                  label: p.id == CheckersStore.chocolateId
+                                      ? '🍫 ${p.price}'
+                                      : '☕ ${p.price}',
+                                  selected: false,
+                                  onTap: () {
+                                    audio.click();
+                                    _store.buyTip(p);
+                                  },
+                                ),
                           ],
                         ),
                     ],

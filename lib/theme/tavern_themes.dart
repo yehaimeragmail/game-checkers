@@ -278,10 +278,18 @@ class TavernThemes {
 
   static TavernThemeDef byId(String id) =>
       all.firstWhere((t) => t.id == id, orElse: () => all.first);
+
+  /// Free tier keeps the signature 'classic' tavern; the other 8 themes are
+  /// the Pro set.
+  static const freeThemeId = 'classic';
+  static bool isProTheme(String id) => id != freeThemeId;
 }
 
 /// Piece styles — physical disc finishes, all tavern-appropriate.
 class PieceStyles {
+  /// Free tier: the first two finishes. The rest are Pro.
+  static const freeStyleCount = 2;
+  static bool isProStyle(int index) => index >= freeStyleCount;
   static const names = [
     'Bakelite',
     'Turned Wood',

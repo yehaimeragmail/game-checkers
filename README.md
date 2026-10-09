@@ -26,9 +26,13 @@ Authoritative rules: `~/workspace/game-factory/stitch-batch1/checkers/RULES.md`
 - `lib/services/tavern_settings.dart` — persisted settings: audio, renameable
   Red/Black player slots, theme + disc style, mode setup (vs bot with bot
   side + Easy/Medium/Hard, or 2-human pass-and-play), lifetime tallies.
-- `lib/services/iap_service.dart` — tip jar (`buy_me_a_coffee`,
-  `buy_me_a_chocolate`); degrades gracefully until products exist in
+- `lib/services/iap_service.dart` — real Play Billing store
+  (`CheckersStore`): `checkerspro` one-time non-consumable Pro unlock,
+  `checkerscoffee` / `checkerschocolate` consumable tips; degrades
+  gracefully ("Available after store setup") until products exist in
   Play Console.
+- `lib/screens/pro_screen.dart` — Free-vs-Pro comparison table, real
+  store prices, restore purchases, tip jar.
 - `lib/theme/tavern_themes.dart` — 9 board themes + 5 disc styles.
 - `lib/screens/` — splash (WAJIHA company splash → game splash), menu,
   game (per-side trays, animated bot turns with narration), settings.

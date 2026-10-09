@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:in_app_review/in_app_review.dart';
+import 'package:share_plus/share_plus.dart';
 import '../checkers_theme.dart';
 import '../engine/checkers_engine.dart';
 import '../services/iap_service.dart';
@@ -6,6 +8,7 @@ import '../services/tavern_audio.dart';
 import '../services/tavern_settings.dart';
 import '../theme/tavern_themes.dart';
 import 'game_screen.dart';
+import 'pro_screen.dart';
 import 'settings_screen.dart';
 
 /// Main menu — Tavern Oak & Brass edition.
@@ -22,7 +25,7 @@ class MenuScreen extends StatefulWidget {
 }
 
 class _MenuScreenState extends State<MenuScreen> {
-  final TipJar _tipJar = TipJar();
+  final CheckersStore _store = CheckersStore();
 
   TavernSettings get _s => widget.settings;
   TavernThemeDef get _t => TavernThemes.byId(_s.themeId);
@@ -31,14 +34,14 @@ class _MenuScreenState extends State<MenuScreen> {
   void initState() {
     super.initState();
     widget.audio.startMenuMusic();
-    _tipJar.init().then((_) {
+    _store.init().then((_) {
       if (mounted) setState(() {});
     });
-    _tipJar.lastThanks.addListener(_onThanks);
+    _store.lastThanks.addListener(_onThanks);
   }
 
   void _onThanks() {
-    final msg = _tipJar.lastThanks.value;
+    final msg = _store.lastThanks.value;
     if (msg == null || !mounted) return;
     widget.audio.win();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -48,18 +51,21 @@ class _MenuScreenState extends State<MenuScreen> {
         behavior: SnackBarBehavior.floating,
       ),
     );
-    _tipJar.lastThanks.value = null;
+    _store.lastThanks.value = null;
   }
 
   @override
   void dispose() {
-    _tipJar.lastThanks.removeListener(_onThanks);
-    _tipJar.dispose();
+    _store.lastThanks.removeListener(_onThanks);
+    _store.dispose();
     super.dispose();
   }
 
   void _play() {
     widget.audio.gameStart();
+    // Flush any in-progress rename edit: the focus-loss commit runs
+    // synchronously, so settings carry the fresh names below.
+    FocusManager.instance.primaryFocus?.unfocus();
     final controller = CheckersController(
       players: [
         CkPlayer(
@@ -76,11 +82,47 @@ class _MenuScreenState extends State<MenuScreen> {
         controller: controller,
         audio: widget.audio,
         settings: _s,
+        store: _store,
       ),
     ))
         .then((_) {
       if (mounted) widget.audio.startMenuMusic();
     });
+  }
+
+  /// Real share sheet with the Play Store link.
+  Future<void> _share() async {
+    widget.audio.click();
+    await Share.share(
+      'Play Checkers with me! https://play.google.com/store/apps/details?id=com.gameswajiha.checkers',
+    );
+  }
+
+  /// Real in-app review; falls back to the store listing when the
+  /// review flow is unavailable.
+  Future<void> _rate() async {
+    widget.audio.click();
+    final review = InAppReview.instance;
+    try {
+      if (await review.isAvailable()) {
+        await review.requestReview();
+      } else {
+        await review.openStoreListing(appStoreId: null);
+      }
+    } catch (_) {
+      // Never crash the menu over a rating prompt.
+    }
+  }
+
+  void _openPro() {
+    widget.audio.click();
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => ProScreen(
+        audio: widget.audio,
+        settings: _s,
+        store: _store,
+      ),
+    ));
   }
 
   @override
@@ -134,11 +176,32 @@ class _MenuScreenState extends State<MenuScreen> {
                   const SizedBox(height: 14),
                   _NamesCard(theme: t),
                   const SizedBox(height: 14),
-                  _SupportCard(theme: t, tipJar: _tipJar),
+                  _SupportCard(theme: t, store: _store),
                   const SizedBox(height: 14),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      _MenuIcon(
+                        theme: t,
+                        icon: Icons.share,
+                        label: 'Share',
+                        onTap: _share,
+                      ),
+                      const SizedBox(width: 18),
+                      _MenuIcon(
+                        theme: t,
+                        icon: Icons.star_rate,
+                        label: 'Rate',
+                        onTap: _rate,
+                      ),
+                      const SizedBox(width: 18),
+                      _MenuIcon(
+                        theme: t,
+                        icon: Icons.workspace_premium,
+                        label: _s.isPro ? 'PRO ✓' : 'PRO',
+                        onTap: _openPro,
+                      ),
+                      const SizedBox(width: 18),
                       _MenuIcon(
                         theme: t,
                         icon: Icons.settings,
@@ -149,12 +212,13 @@ class _MenuScreenState extends State<MenuScreen> {
                             builder: (_) => SettingsScreen(
                               audio: widget.audio,
                               settings: _s,
+                              store: _store,
                             ),
                           ));
                           if (mounted) setState(() {});
                         },
                       ),
-                      const SizedBox(width: 26),
+                      const SizedBox(width: 18),
                       _MenuIcon(
                         theme: t,
                         icon: Icons.help_outline,
@@ -383,10 +447,17 @@ class _ModeCard extends StatelessWidget {
                 for (int d = 0; d < 3; d++)
                   TavernChip(
                     theme: theme,
-                    label: TavernSettings.difficulties[d],
+                    label: d == 2 && !s.isPro
+                        ? '🔒 ${TavernSettings.difficulties[d]}'
+                        : TavernSettings.difficulties[d],
                     selected: s.difficulty == d,
                     onTap: () {
                       audio.click();
+                      if (d == 2 && !s.isPro) {
+                        // Hard bot is Pro-only — show the Pro screen.
+                        screen._openPro();
+                        return;
+                      }
                       s.setSetup(
                           vsBot: true,
                           botIsRed: s.botIsRed,
@@ -436,60 +507,77 @@ class _StyleCard extends StatelessWidget {
                 GestureDetector(
                   onTap: () {
                     audio.click();
+                    if (!s.isPro && TavernThemes.isProTheme(th.id)) {
+                      screen._openPro();
+                      return;
+                    }
                     s.setTheme(th.id);
                   },
-                  child: Container(
-                    width: 100,
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 8, horizontal: 4),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      color: th.woodDeep.withValues(alpha: 0.7),
-                      border: Border.all(
-                        color: s.themeId == th.id
-                            ? th.accentLight
-                            : th.accent.withValues(alpha: 0.35),
-                        width: s.themeId == th.id ? 3 : 1.5,
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                  child: Stack(
+                    children: [
+                      Container(
+                        width: 100,
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 8, horizontal: 4),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          color: th.woodDeep.withValues(alpha: 0.7),
+                          border: Border.all(
+                            color: s.themeId == th.id
+                                ? th.accentLight
+                                : th.accent.withValues(alpha: 0.35),
+                            width: s.themeId == th.id ? 3 : 1.5,
+                          ),
+                        ),
+                        child: Column(
                           children: [
-                            Container(
-                              width: 16,
-                              height: 16,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: th.redDisc,
-                                border: Border.all(
-                                    color: th.accentLight, width: 1),
-                              ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 16,
+                                  height: 16,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: th.redDisc,
+                                    border: Border.all(
+                                        color: th.accentLight, width: 1),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Container(
+                                  width: 16,
+                                  height: 16,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: th.blackDisc,
+                                    border: Border.all(
+                                        color: th.accentLight, width: 1),
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 4),
-                            Container(
-                              width: 16,
-                              height: 16,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: th.blackDisc,
-                                border: Border.all(
-                                    color: th.accentLight, width: 1),
-                              ),
+                            const SizedBox(height: 6),
+                            Text(
+                              th.name,
+                              style: Tavern.label(10, theme: th),
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          th.name,
-                          style: Tavern.label(10, theme: th),
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                      ),
+                      if (!s.isPro && TavernThemes.isProTheme(th.id))
+                        Positioned(
+                          top: 4,
+                          right: 6,
+                          child: Icon(Icons.lock,
+                              size: 14,
+                              color: th.accentLight
+                                  .withValues(alpha: 0.9)),
                         ),
-                      ],
-                    ),
+                    ],
                   ),
                 ),
             ],
@@ -508,10 +596,16 @@ class _StyleCard extends StatelessWidget {
               for (int i = 0; i < PieceStyles.names.length; i++)
                 TavernChip(
                   theme: theme,
-                  label: PieceStyles.names[i],
+                  label: (!s.isPro && PieceStyles.isProStyle(i))
+                      ? '🔒 ${PieceStyles.names[i]}'
+                      : PieceStyles.names[i],
                   selected: s.pieceStyle == i,
                   onTap: () {
                     audio.click();
+                    if (!s.isPro && PieceStyles.isProStyle(i)) {
+                      screen._openPro();
+                      return;
+                    }
                     s.setPieceStyle(i);
                   },
                 ),
@@ -544,6 +638,7 @@ class _NamesCard extends StatelessWidget {
             discHi: theme.redDiscHi,
             label: 'Red',
             initial: s.redName,
+            fallback: TavernSettings.defaultRedName,
             onDone: (v) => s.setRedName(v),
           ),
           const SizedBox(height: 8),
@@ -553,6 +648,7 @@ class _NamesCard extends StatelessWidget {
             discHi: theme.blackDiscHi,
             label: 'Black',
             initial: s.blackName,
+            fallback: TavernSettings.defaultBlackName,
             onDone: (v) => s.setBlackName(v),
           ),
           const SizedBox(height: 8),
@@ -574,6 +670,7 @@ class _NameRow extends StatefulWidget {
   final Color discHi;
   final String label;
   final String initial;
+  final String fallback;
   final ValueChanged<String> onDone;
   const _NameRow({
     required this.theme,
@@ -581,6 +678,7 @@ class _NameRow extends StatefulWidget {
     required this.discHi,
     required this.label,
     required this.initial,
+    required this.fallback,
     required this.onDone,
   });
 
@@ -590,25 +688,54 @@ class _NameRow extends StatefulWidget {
 
 class _NameRowState extends State<_NameRow> {
   late final TextEditingController _c;
+  late final FocusNode _focus;
+
+  /// Last value actually committed to settings. Guards against double
+  /// commits (keyboard done + focus loss fire back-to-back).
+  late String _committed;
 
   @override
   void initState() {
     super.initState();
     _c = TextEditingController(text: widget.initial);
+    _committed = widget.initial;
+    _focus = FocusNode();
+    // Commit when the user taps away / presses Play without hitting the
+    // keyboard's done button. Previously the typed name lived only in the
+    // controller in that case: it LOOKED saved but never reached
+    // SharedPreferences and was lost on restart.
+    _focus.addListener(() {
+      if (!_focus.hasFocus) _commitIfChanged();
+    });
   }
 
   @override
   void didUpdateWidget(covariant _NameRow old) {
     super.didUpdateWidget(old);
-    if (old.initial != widget.initial && _c.text != widget.initial) {
-      _c.text = widget.initial;
+    if (old.initial != widget.initial) {
+      _committed = widget.initial;
+      if (_c.text != widget.initial) _c.text = widget.initial;
     }
   }
 
   @override
   void dispose() {
+    // Flush a pending edit if the row goes away while focused.
+    _commitIfChanged();
+    _focus.dispose();
     _c.dispose();
     super.dispose();
+  }
+
+  /// Write the field to settings iff it differs from the last committed
+  /// value. Blank input falls back to the default name.
+  void _commitIfChanged() {
+    final t = _c.text.trim();
+    final value = t.isEmpty ? widget.fallback : t;
+    if (value != _committed) {
+      _committed = value;
+      widget.onDone(_c.text);
+    }
   }
 
   @override
@@ -645,6 +772,7 @@ class _NameRowState extends State<_NameRow> {
             ),
             child: TextField(
               controller: _c,
+              focusNode: _focus,
               style: Tavern.body(15, theme: widget.theme),
               maxLength: 14,
               decoration: InputDecoration(
@@ -655,8 +783,10 @@ class _NameRowState extends State<_NameRow> {
                     theme: widget.theme,
                     color: widget.theme.ivory.withValues(alpha: 0.4)),
               ),
-              onSubmitted: widget.onDone,
-              onEditingComplete: () => widget.onDone(_c.text),
+              onSubmitted: (v) {
+                _commitIfChanged();
+                _focus.unfocus();
+              },
             ),
           ),
         ),
@@ -669,8 +799,8 @@ class _NameRowState extends State<_NameRow> {
 /// Tip jar (IAP).
 class _SupportCard extends StatelessWidget {
   final TavernThemeDef theme;
-  final TipJar tipJar;
-  const _SupportCard({required this.theme, required this.tipJar});
+  final CheckersStore store;
+  const _SupportCard({required this.theme, required this.store});
 
   @override
   Widget build(BuildContext context) {
@@ -687,9 +817,9 @@ class _SupportCard extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
-          if (tipJar.products.isEmpty)
+          if (!store.storeReady)
             Text(
-              tipJar.error ?? 'Loading…',
+              store.error ?? 'Available after store setup.',
               style: Tavern.body(13,
                   theme: theme,
                   color: theme.ivory.withValues(alpha: 0.6)),
@@ -699,18 +829,19 @@ class _SupportCard extends StatelessWidget {
               spacing: 10,
               alignment: WrapAlignment.center,
               children: [
-                for (final p in tipJar.products)
-                  TavernChip(
-                    theme: theme,
-                    label: p.id == TipJar.chocolateId
-                        ? '🍫 ${p.price}'
-                        : '☕ ${p.price}',
-                    selected: false,
-                    onTap: () {
-                      audio.click();
-                      tipJar.buy(p);
-                    },
-                  ),
+                for (final p in store.products)
+                  if (p.id != CheckersStore.proId)
+                    TavernChip(
+                      theme: theme,
+                      label: p.id == CheckersStore.chocolateId
+                          ? '🍫 ${p.price}'
+                          : '☕ ${p.price}',
+                      selected: false,
+                      onTap: () {
+                        audio.click();
+                        store.buyTip(p);
+                      },
+                    ),
               ],
             ),
         ],

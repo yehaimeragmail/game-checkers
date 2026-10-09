@@ -1,11 +1,16 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../theme/tavern_themes.dart';
 
 /// Persisted settings + stats for Checkers. Survives app restarts.
 ///
 /// Stores: audio toggles, renameable player slots (red / black), theme and
 /// piece-style choices, mode setup (vs bot / 2 players, bot side,
-/// difficulty), and lifetime tallies.
+/// difficulty), Pro unlock state, and lifetime tallies.
+///
+/// Pro gating: free tier keeps the 'classic' theme, the first two disc
+/// styles, and Easy/Medium bots. Everything else (8 more themes, 3 more
+/// disc styles, Hard bot) requires the `checkerspro` one-time purchase.
 class TavernSettings extends ChangeNotifier {
   // Legacy keys (kept so existing installs keep their data).
   static const _kMusic = 'ck_music';
@@ -24,6 +29,7 @@ class TavernSettings extends ChangeNotifier {
   static const _kBotIsRed = 'ck_bot_is_red';
   static const _kGames = 'ck_games_played';
   static const _kBestMoves = 'ck_best_moves';
+  static const _kIsPro = 'ck_is_pro';
 
   static const defaultRedName = 'Scarlet';
   static const defaultBlackName = 'Onyx';
@@ -44,6 +50,7 @@ class TavernSettings extends ChangeNotifier {
   int draws = 0;
   int gamesPlayed = 0;
   int bestMoves = 0; // fewest moves in a won game (0 = none yet)
+  bool isPro = false; // true after the checkerspro one-time purchase
 
   SharedPreferences? _prefs;
 
@@ -56,7 +63,7 @@ class TavernSettings extends ChangeNotifier {
     difficulty = (p.getInt(_kDifficulty) ?? 1).clamp(0, 2);
     redName = _clean(p.getString(_kRedName), defaultRedName);
     blackName = _clean(p.getString(_kBlackName), defaultBlackName);
-    themeId = p.getString(_kTheme) ?? 'classic';
+    themeId = p.getString(_kTheme) ?? TavernThemes.freeThemeId;
     pieceStyle = (p.getInt(_kPieceStyle) ?? 0).clamp(0, 4);
     vsBot = p.getBool(_kVsBot) ?? true;
     botIsRed = p.getBool(_kBotIsRed) ?? false;
@@ -65,6 +72,10 @@ class TavernSettings extends ChangeNotifier {
     draws = p.getInt(_kDraws) ?? 0;
     gamesPlayed = p.getInt(_kGames) ?? 0;
     bestMoves = p.getInt(_kBestMoves) ?? 0;
+    isPro = p.getBool(_kIsPro) ?? false;
+    // Stale prefs (or a lapsed/uncached entitlement) must never leave the
+    // free tier holding Pro-only content.
+    enforceFreeTier();
     notifyListeners();
   }
 
@@ -91,6 +102,7 @@ class TavernSettings extends ChangeNotifier {
     await p.setInt(_kDraws, draws);
     await p.setInt(_kGames, gamesPlayed);
     await p.setInt(_kBestMoves, bestMoves);
+    await p.setBool(_kIsPro, isPro);
   }
 
   Future<void> setMusic(bool v) async {
@@ -113,6 +125,7 @@ class TavernSettings extends ChangeNotifier {
 
   Future<void> setDifficulty(int v) async {
     difficulty = v.clamp(0, 2);
+    if (!isPro && difficulty == 2) difficulty = 1; // Hard is Pro-only
     notifyListeners();
     await _save();
   }
@@ -127,6 +140,7 @@ class TavernSettings extends ChangeNotifier {
     this.vsBot = vsBot;
     this.botIsRed = botIsRed;
     this.difficulty = difficulty.clamp(0, 2);
+    if (!isPro && this.difficulty == 2) this.difficulty = 1; // Hard is Pro
     notifyListeners();
     await _save();
   }
@@ -144,15 +158,45 @@ class TavernSettings extends ChangeNotifier {
   }
 
   Future<void> setTheme(String id) async {
+    // Defense in depth: the UI also locks Pro themes, but a direct call
+    // must never smuggle Pro content into the free tier.
+    if (!isPro && TavernThemes.isProTheme(id)) return;
     themeId = id;
     notifyListeners();
     await _save();
   }
 
   Future<void> setPieceStyle(int v) async {
-    pieceStyle = v.clamp(0, 4);
+    v = v.clamp(0, 4);
+    if (!isPro && PieceStyles.isProStyle(v)) return;
+    pieceStyle = v;
     notifyListeners();
     await _save();
+  }
+
+  /// Flip the Pro entitlement (called after a verified `checkerspro`
+  /// purchase or restore). Unlocking re-checks nothing; locking clamps any
+  /// Pro-only choices back to the free tier.
+  Future<void> setPro(bool v) async {
+    if (isPro == v) return;
+    isPro = v;
+    enforceFreeTier();
+    notifyListeners();
+    await _save();
+  }
+
+  /// Clamp Pro-only choices back to free-tier values. Called after load
+  /// and whenever Pro status could have changed. Never notifies — callers
+  /// notify.
+  void enforceFreeTier() {
+    if (isPro) return;
+    if (TavernThemes.isProTheme(themeId)) {
+      themeId = TavernThemes.freeThemeId;
+    }
+    if (PieceStyles.isProStyle(pieceStyle)) {
+      pieceStyle = 0;
+    }
+    if (difficulty == 2) difficulty = 1;
   }
 
   /// Record a finished game. [winnerRed] null = draw.
