@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../checkers_theme.dart';
 import '../services/iap_service.dart';
 import '../services/tavern_audio.dart';
@@ -294,56 +295,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                _SectionTitle('Support', t),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    color: t.woodDeep.withValues(alpha: 0.65),
-                    border: Border.all(
-                        color: t.accent.withValues(alpha: 0.4), width: 1.5),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        'Checkers is 100% free. Tips keep the tavern open!',
-                        style: Tavern.body(14, theme: t),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 10),
-                      if (!_store.storeReady)
+                // Tips are Android-only: hidden on iOS (App Store).
+                if (defaultTargetPlatform != TargetPlatform.iOS) ...[
+                  const SizedBox(height: 10),
+                  _SectionTitle('Support', t),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color: t.woodDeep.withValues(alpha: 0.65),
+                      border: Border.all(
+                          color: t.accent.withValues(alpha: 0.4), width: 1.5),
+                    ),
+                    child: Column(
+                      children: [
                         Text(
-                          _store.error ?? 'Available after store setup.',
-                          style: Tavern.body(13,
-                              theme: t,
-                              color:
-                                  t.ivory.withValues(alpha: 0.6)),
-                        )
-                      else
-                        Wrap(
-                          spacing: 10,
-                          alignment: WrapAlignment.center,
-                          children: [
-                            for (final p in _store.products)
-                              if (p.id != CheckersStore.proId)
-                                TavernChip(
-                                  theme: t,
-                                  label: p.id == CheckersStore.chocolateId
-                                      ? '🍫 ${p.price}'
-                                      : '☕ ${p.price}',
-                                  selected: false,
-                                  onTap: () {
-                                    audio.click();
-                                    _store.buyTip(p);
-                                  },
-                                ),
-                          ],
+                          'Checkers is 100% free. Tips keep the tavern open!',
+                          style: Tavern.body(14, theme: t),
+                          textAlign: TextAlign.center,
                         ),
-                    ],
+                        const SizedBox(height: 10),
+                        if (!_store.storeReady)
+                          Text(
+                            _store.error ?? 'Available after store setup.',
+                            style: Tavern.body(13,
+                                theme: t,
+                                color:
+                                    t.ivory.withValues(alpha: 0.6)),
+                          )
+                        else
+                          Wrap(
+                            spacing: 10,
+                            alignment: WrapAlignment.center,
+                            children: [
+                              for (final p in _store.products)
+                                if (p.id != CheckersStore.proId)
+                                  TavernChip(
+                                    theme: t,
+                                    label: p.id == CheckersStore.chocolateId
+                                        ? '🍫 ${p.price}'
+                                        : '☕ ${p.price}',
+                                    selected: false,
+                                    onTap: () {
+                                      audio.click();
+                                      _store.buyTip(p);
+                                    },
+                                  ),
+                            ],
+                          ),
+                      ],
+                    ),
                   ),
-                ),
+                ],
                 const SizedBox(height: 10),
                 _SectionTitle('About', t),
                 Text(

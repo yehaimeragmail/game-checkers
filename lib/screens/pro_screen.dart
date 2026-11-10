@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import '../checkers_theme.dart';
 import '../services/iap_service.dart';
@@ -113,12 +114,15 @@ class _ProScreenState extends State<ProScreen> {
                     store: store,
                     audio: widget.audio,
                   ),
-                  const SizedBox(height: 16),
-                  _TipsCard(
-                    theme: t,
-                    store: store,
-                    audio: widget.audio,
-                  ),
+                  // Tips are Android-only: hidden on iOS (App Store).
+                  if (defaultTargetPlatform != TargetPlatform.iOS) ...[
+                    const SizedBox(height: 16),
+                    _TipsCard(
+                      theme: t,
+                      store: store,
+                      audio: widget.audio,
+                    ),
+                  ],
                   const SizedBox(height: 20),
                 ],
               ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:share_plus/share_plus.dart';
 import '../checkers_theme.dart';
@@ -175,9 +176,12 @@ class _MenuScreenState extends State<MenuScreen> {
                   _StyleCard(theme: t),
                   const SizedBox(height: 14),
                   _NamesCard(theme: t),
-                  const SizedBox(height: 14),
-                  _SupportCard(theme: t, store: _store),
-                  const SizedBox(height: 14),
+                  // Tips are Android-only: hidden on iOS (App Store).
+                  if (defaultTargetPlatform != TargetPlatform.iOS) ...[
+                    const SizedBox(height: 14),
+                    _SupportCard(theme: t, store: _store),
+                    const SizedBox(height: 14),
+                  ],
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
