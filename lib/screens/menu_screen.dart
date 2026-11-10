@@ -95,7 +95,7 @@ class _MenuScreenState extends State<MenuScreen> {
   Future<void> _share() async {
     widget.audio.click();
     await Share.share(
-      'Play Checkers with me! https://play.google.com/store/apps/details?id=com.gameswajiha.checkers',
+      'Play Checkers with me! https://apps.apple.com/app/id6830153323',
     );
   }
 
@@ -240,17 +240,6 @@ class _MenuScreenState extends State<MenuScreen> {
                       'Red ${_s.redWins}   •   Black ${_s.blackWins}   •   Draws ${_s.draws}${_s.bestMoves > 0 ? '   •   Best: ${_s.bestMoves} moves' : ''}',
                       style: Tavern.label(12, theme: t),
                     ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Image.asset('assets/wajiha_logo.png',
-                          width: 22, height: 22, fit: BoxFit.contain),
-                      const SizedBox(width: 8),
-                      Text('Credits: WAJIHA',
-                          style: Tavern.label(12, theme: t)),
-                    ],
-                  ),
                   const SizedBox(height: 16),
                 ],
               ),
@@ -812,7 +801,7 @@ class _SupportCard extends StatelessWidget {
     final audio = screen.widget.audio;
     return TavernCard(
       theme: theme,
-      title: 'Support Wajiha',
+      title: 'Gold Star',
       child: Column(
         children: [
           Text(

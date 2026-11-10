@@ -351,7 +351,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 10),
                 _SectionTitle('About', t),
                 Text(
-                  'Checkers — Tavern Oak & Brass edition.\nVersion 2.0.0 • Made with ♥ by WAJIHA',
+                  'Checkers — Tavern Oak & Brass edition.\nVersion 2.0.0',
                   style: Tavern.body(13,
                       theme: t,
                       color: t.ivory.withValues(alpha: 0.65)),

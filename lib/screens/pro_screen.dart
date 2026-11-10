@@ -10,7 +10,7 @@ import '../theme/tavern_themes.dart';
 /// Checkers PRO: Free-vs-Pro comparison, real purchase, restore, tip jar.
 /// All prices come from the store — never hardcoded, never placeholders.
 ///
-/// Products (created by Wajiha in Play Console):
+/// Products (created in Play Console):
 /// - `checkerspro` — one-time non-consumable Pro unlock.
 /// - `checkerscoffee` / `checkerschocolate` — consumable tips.
 class ProScreen extends StatefulWidget {
